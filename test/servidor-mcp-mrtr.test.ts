@@ -13,7 +13,7 @@ const SEM_ALTERNATIVAS = 'Sem alternativas disponiveis no intervalo';
 const em = (dia: string, hora: string) => `2026-11-${dia}T${hora}:00-03:00`;
 
 /** O input_required do contrato para estas Alternativas, sem o requestState. */
-function pedidoDeEscolha(alternativas: string[]) {
+function solicitacaoDeEscolha(alternativas: string[]) {
   return {
     escolha_de_sala: {
       method: 'elicitation/create',
@@ -67,7 +67,7 @@ describe('servidor MCP: Conflito em reservar_sala (MRTR)', () => {
     assert.equal(r.status, 200);
     const resultado = r.corpo?.result;
     assert.equal(resultado?.resultType, 'input_required', JSON.stringify(r.corpo));
-    assert.deepEqual(resultado.inputRequests, pedidoDeEscolha(['sala-fusca', 'sala-mirante']));
+    assert.deepEqual(resultado.inputRequests, solicitacaoDeEscolha(['sala-fusca', 'sala-mirante']));
     assert.equal(typeof resultado.requestState, 'string');
     assert.ok(resultado.requestState.length > 0);
   });
@@ -89,7 +89,7 @@ describe('servidor MCP: Conflito em reservar_sala (MRTR)', () => {
   test('retry com accept numa Alternativa selada cria a Reserva nela, com o Pedido selado', async () => {
     const pedido = { sala: 'sala-garagem', inicio: em('06', '10:00'), fim: em('06', '11:00'), responsavel: 'Marty' };
     const pausa = await pausar(pedido);
-    assert.deepEqual(pausa.inputRequests, pedidoDeEscolha(['sala-fusca', 'sala-mirante']));
+    assert.deepEqual(pausa.inputRequests, solicitacaoDeEscolha(['sala-fusca', 'sala-mirante']));
 
     // Os arguments reenviados nao contam: valem os do requestState.
     const adulterado = { sala: 'sala-aquario', inicio: em('06', '15:00'), fim: em('06', '16:00'), responsavel: 'Biff' };
@@ -118,7 +118,7 @@ describe('servidor MCP: Conflito em reservar_sala (MRTR)', () => {
 
   for (const [caso, sala] of [
     ['Sala livre mas fora das Alternativas seladas', 'sala-aquario'],
-    ['a propria Sala ocupada', 'sala-garagem'],
+    ['a propria Sala pedida, com Conflito', 'sala-garagem'],
     ['Sala inexistente', 'sala-delorean'],
   ] as const) {
     test(`Escolha fora das Alternativas seladas (${caso}) gera nova Pausa, sem Reserva`, async () => {
@@ -130,7 +130,7 @@ describe('servidor MCP: Conflito em reservar_sala (MRTR)', () => {
       assert.equal(r.status, 200);
       const resultado = r.corpo?.result;
       assert.equal(resultado?.resultType, 'input_required', JSON.stringify(r.corpo));
-      assert.deepEqual(resultado.inputRequests, pedidoDeEscolha(['sala-fusca', 'sala-mirante']));
+      assert.deepEqual(resultado.inputRequests, solicitacaoDeEscolha(['sala-fusca', 'sala-mirante']));
       assert.equal(typeof resultado.requestState, 'string');
 
       const consulta = await consultar('sala-aquario', pedido.inicio, pedido.fim);
@@ -141,7 +141,7 @@ describe('servidor MCP: Conflito em reservar_sala (MRTR)', () => {
   test('Alternativa ocupada entre a Pausa e o retry gera nova Pausa com as Alternativas atualizadas', async () => {
     const pedido = { sala: 'sala-garagem', inicio: em('16', '10:00'), fim: em('16', '11:00'), responsavel: 'Doc' };
     const pausa = await pausar(pedido);
-    assert.deepEqual(pausa.inputRequests, pedidoDeEscolha(['sala-fusca', 'sala-mirante']));
+    assert.deepEqual(pausa.inputRequests, solicitacaoDeEscolha(['sala-fusca', 'sala-mirante']));
 
     const intruso = await reservar({ sala: 'sala-fusca', inicio: em('16', '10:30'), fim: em('16', '11:30'), responsavel: 'Biff' });
     assert.equal(intruso.corpo?.result?.structuredContent?.reservado, true);
@@ -149,7 +149,7 @@ describe('servidor MCP: Conflito em reservar_sala (MRTR)', () => {
     const r = await retomar(pedido, { action: 'accept', content: { sala: 'sala-fusca' } }, pausa.requestState);
     const resultado = r.corpo?.result;
     assert.equal(resultado?.resultType, 'input_required', JSON.stringify(r.corpo));
-    assert.deepEqual(resultado.inputRequests, pedidoDeEscolha(['sala-mirante']));
+    assert.deepEqual(resultado.inputRequests, solicitacaoDeEscolha(['sala-mirante']));
 
     // A nova Pausa leva um requestState proprio, que conclui na Alternativa que sobrou.
     const fim = await retomar(pedido, { action: 'accept', content: { sala: 'sala-mirante' } }, resultado.requestState);

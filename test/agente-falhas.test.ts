@@ -152,7 +152,7 @@ describe('agente: taskId desconhecido e Task terminal', () => {
     const task = taskDe(await enviarMensagem(url, pedidoLivre('07')));
     assert.equal(task.status.state, 'TASK_STATE_COMPLETED');
     await recusaTerminal(task.id, pedidoLivre('08'));
-    // Nem o Pedido valido reenviado na Task terminal chega a reservar: o slot continua livre.
+    // Nem o Pedido valido reenviado na Task terminal chega a reservar: o Intervalo continua livre.
     assert.equal(taskDe(await enviarMensagem(url, pedidoLivre('08'))).status.state, 'TASK_STATE_COMPLETED');
   });
 

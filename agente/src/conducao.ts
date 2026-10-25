@@ -18,12 +18,12 @@ export type ReservaFeita = {
 };
 
 /** O que a Pausa guarda do input_required: tudo opaco, menos o enum da Escolha. */
-export type PedidoDeEscolha = Omit<Continuacao, 'argumentos'>;
+export type SolicitacaoDeEscolha = Omit<Continuacao, 'argumentos'>;
 
 /** Desfecho de um `tools/call reservar_sala`, ja na linguagem da Task. */
 export type Desfecho =
   | { tipo: 'concluida'; reserva: ReservaFeita }
-  | { tipo: 'pausa'; escolha: PedidoDeEscolha }
+  | { tipo: 'pausa'; escolha: SolicitacaoDeEscolha }
   /** `reservado: false`: so vira CANCELED como resposta a uma Recusa. */
   | { tipo: 'sem-reserva'; mensagem: string }
   | { tipo: 'falha'; mensagem: string };
@@ -36,12 +36,12 @@ export const MENSAGEM_DE_RECUSA = 'Recusa registrada: Task cancelada sem Reserva
  * `const`) de `requestedSchema.properties.sala`, na ordem do servidor. O
  * `requestState` e guardado como veio; o agente nunca o decodifica.
  */
-function lerPedidoDeEscolha(r: InputRequiredResult): PedidoDeEscolha | undefined {
+function lerSolicitacaoDeEscolha(r: InputRequiredResult): SolicitacaoDeEscolha | undefined {
   const chaves = Object.keys(r.inputRequests ?? {});
   if (chaves.length !== 1 || typeof r.requestState !== 'string') return undefined;
   const [chave] = chaves;
-  const pedido = r.inputRequests?.[chave] as { params?: { requestedSchema?: { properties?: Record<string, unknown> } } };
-  const sala = pedido?.params?.requestedSchema?.properties?.sala as { enum?: unknown; const?: unknown } | undefined;
+  const solicitacao = r.inputRequests?.[chave] as { params?: { requestedSchema?: { properties?: Record<string, unknown> } } };
+  const sala = solicitacao?.params?.requestedSchema?.properties?.sala as { enum?: unknown; const?: unknown } | undefined;
   const alternativas = Array.isArray(sala?.enum) ? sala.enum : sala?.const !== undefined ? [sala.const] : [];
   if (alternativas.length === 0 || !alternativas.every((a) => typeof a === 'string')) return undefined;
   return { chave, requestState: r.requestState, alternativas };
@@ -59,7 +59,7 @@ const texto = (r: { content?: unknown }) =>
  */
 export function interpretarResultado(r: ResultadoTool): Desfecho {
   if (isInputRequiredResult(r)) {
-    const escolha = lerPedidoDeEscolha(r);
+    const escolha = lerSolicitacaoDeEscolha(r);
     if (!escolha) return { tipo: 'falha', mensagem: `input_required inesperado de reservar_sala: ${JSON.stringify(r.inputRequests)}` };
     return { tipo: 'pausa', escolha };
   }

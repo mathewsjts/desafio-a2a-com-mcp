@@ -264,7 +264,7 @@ describe('Agenda: Alternativas', () => {
     ]);
   });
 
-  test('Sala ocupada no Intervalo fica de fora, e a lista anda para a proxima', () => {
+  test('Sala com Conflito no Intervalo fica de fora, e a lista anda para a proxima', () => {
     const agenda = carregarAgenda();
     // A garagem tem res-0001 das 14:00 as 15:00.
     assert.deepEqual(agenda.alternativas('sala-aquario', { inicio: em3('14:30'), fim: em3('15:30') }), [

@@ -19,7 +19,7 @@ export type Agenda = {
   /** Reservas da Sala que se sobrepoem ao Intervalo (semiaberto), na ordem da Agenda. */
   consultarConflitos(sala: string, intervalo: Intervalo): Reserva[];
   /**
-   * Alternativas a uma Sala ocupada: outras Salas livres no Intervalo, com
+   * Alternativas a um Conflito na Sala pedida: outras Salas livres no Intervalo, com
    * capacidade maior ou igual a da pedida, por capacidade crescente e depois
    * `id`, no maximo tres.
    */
