@@ -4,7 +4,7 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
-import { carregarAgenda } from './agenda.ts';
+import { carregarAgenda, type Reserva } from './agenda.ts';
 import { registrarPolitica } from './politica.ts';
 
 const agenda = carregarAgenda();
@@ -26,8 +26,10 @@ function erroDeDominio(mensagem: string) {
   return { isError: true, content: [{ type: 'text' as const, text: mensagem }] };
 }
 
-function naoImplementada(tool: string) {
-  return { isError: true, content: [{ type: 'text' as const, text: `Nao implementado: ${tool}` }] };
+/** Reserva concluida no formato de saida de `reservar_sala`. */
+function reservaConcluida(reserva: Reserva, politica: string) {
+  const { id, sala, inicio, fim, responsavel } = reserva;
+  return resultado({ reserva: id, reservado: true, sala, inicio, fim, responsavel, politica, motivo: null });
 }
 
 export function criarServidorMcp(): McpServer {
@@ -66,8 +68,6 @@ export function criarServidorMcp(): McpServer {
     },
   );
 
-  // Declarada ja para que a descoberta fique completa; o comportamento chega
-  // com a fatia 04.
   servidor.registerTool(
     'reservar_sala',
     {
@@ -84,7 +84,15 @@ export function criarServidorMcp(): McpServer {
         motivo: z.string().nullable().optional(),
       }),
     },
-    async () => naoImplementada('reservar_sala'),
+    async (args) => {
+      const validacao = agenda.validarPedido(args);
+      if (!validacao.ok) return erroDeDominio(validacao.erro);
+      const conflitos = agenda.consultarConflitos(validacao.sala, validacao.intervalo);
+      // Provisorio: a fatia 05 troca este erro pela Escolha entre Alternativas (MRTR).
+      if (conflitos.length > 0) return erroDeDominio(`Conflito com ${conflitos.map((c) => c.id).join(', ')}`);
+      const reserva = agenda.reservar(validacao.sala, validacao.intervalo, args.responsavel);
+      return reservaConcluida(reserva, agenda.versaoDaPolitica());
+    },
   );
 
   registrarPolitica(servidor);
