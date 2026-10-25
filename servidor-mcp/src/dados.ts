@@ -17,3 +17,13 @@ export type Reserva = { id: string; sala: string; inicio: string; fim: string; r
 export function lerReservas(): Reserva[] {
   return JSON.parse(readFileSync(join(PASTA_DADOS, 'reservas.json'), 'utf8')) as Reserva[];
 }
+
+export const ARQUIVO_POLITICA = join(PASTA_DADOS, 'politica-de-uso.md');
+
+/** Versao da Politica de uso: a primeira linha do arquivo e `versao: <valor>`. Lida a cada chamada. */
+export function lerVersaoDaPolitica(): string {
+  const primeiraLinha = readFileSync(ARQUIVO_POLITICA, 'utf8').split('\n', 1)[0];
+  const versao = /^versao:\s*(\S+)\s*$/.exec(primeiraLinha)?.[1];
+  if (!versao) throw new Error(`Politica de uso sem versao na primeira linha: ${ARQUIVO_POLITICA}`);
+  return versao;
+}

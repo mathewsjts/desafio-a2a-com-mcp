@@ -2,7 +2,7 @@
 // Livre de MCP: recebe e devolve valores simples, e os erros de dominio sao as
 // mensagens exatas do contrato.
 
-import { lerReservas, lerSalas, type Reserva, type Sala } from './dados.ts';
+import { lerReservas, lerSalas, lerVersaoDaPolitica, type Reserva, type Sala } from './dados.ts';
 
 export type { Reserva, Sala };
 
@@ -18,6 +18,13 @@ export type Agenda = {
   validarPedido(pedido: Pedido): Validacao;
   /** Reservas da Sala que se sobrepoem ao Intervalo (semiaberto), na ordem da Agenda. */
   consultarConflitos(sala: string, intervalo: Intervalo): Reserva[];
+  /**
+   * Cria a Reserva com o proximo id `res-NNNN` e a guarda em memoria. Nao
+   * revalida: quem chama ja passou por `validarPedido` e checou os Conflitos.
+   */
+  reservar(sala: string, intervalo: Intervalo, responsavel: string): Reserva;
+  /** Versao vigente da Politica de uso (relida a cada chamada). */
+  versaoDaPolitica(): string;
 };
 
 const HORA_MS = 60 * 60 * 1000;
@@ -30,7 +37,7 @@ const ERRO_INTERVALO = 'Intervalo invalido: fim deve ser posterior a inicio';
 const ERRO_JANELA = 'Fora da janela de uso: a politica permite reservas entre 08:00 e 20:00';
 const ERRO_DURACAO = 'Duracao acima do limite: a politica permite no maximo 2 horas';
 
-export function criarAgenda(dados: { salas: Sala[]; reservas: Reserva[] }): Agenda {
+export function criarAgenda(dados: { salas: Sala[]; reservas: Reserva[]; versaoDaPolitica: () => string }): Agenda {
   const salas = dados.salas;
   const reservas = dados.reservas.map((r) => ({ ...r, ...normalizar(r) }));
   return {
@@ -55,7 +62,19 @@ export function criarAgenda(dados: { salas: Sala[]; reservas: Reserva[] }): Agen
         return outro.inicio < fim && inicio < outro.fim;
       });
     },
+    reservar(sala, intervalo, responsavel) {
+      const reserva = { id: proximoId(reservas), sala, ...normalizar(intervalo), responsavel };
+      reservas.push(reserva);
+      return reserva;
+    },
+    versaoDaPolitica: dados.versaoDaPolitica,
   };
+}
+
+/** `res-NNNN` seguinte ao maior numero entre as Reservas existentes. */
+function proximoId(reservas: Reserva[]): string {
+  const maior = Math.max(0, ...reservas.map((r) => Number(/^res-(\d+)$/.exec(r.id)?.[1] ?? 0)));
+  return `res-${String(maior + 1).padStart(4, '0')}`;
 }
 
 // --- Tempo -------------------------------------------------------------------
@@ -112,5 +131,5 @@ function emSaoPaulo(instante: number): string {
 
 /** Agenda nova com as Salas e Reservas da pasta de dados do starter. */
 export function carregarAgenda(): Agenda {
-  return criarAgenda({ salas: lerSalas(), reservas: lerReservas() });
+  return criarAgenda({ salas: lerSalas(), reservas: lerReservas(), versaoDaPolitica: lerVersaoDaPolitica });
 }

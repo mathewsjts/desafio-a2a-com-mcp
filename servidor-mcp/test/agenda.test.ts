@@ -215,3 +215,35 @@ describe('Agenda: Conflitos', () => {
     assert.deepEqual(agenda.consultarConflitos(v.sala, v.intervalo), [RES_0001]);
   });
 });
+
+describe('Agenda: reservar', () => {
+  test('cria Reservas com ids sequenciais depois dos existentes', () => {
+    const agenda = carregarAgenda();
+    assert.deepEqual(agenda.reservar('sala-aquario', { inicio: em3('09:00'), fim: em3('10:00') }, 'Doc'), {
+      id: 'res-0003',
+      sala: 'sala-aquario',
+      inicio: '2026-11-03T09:00:00-03:00',
+      fim: '2026-11-03T10:00:00-03:00',
+      responsavel: 'Doc',
+    });
+    assert.equal(agenda.reservar('sala-porao', { inicio: em3('09:00'), fim: em3('10:00') }, 'Marty').id, 'res-0004');
+  });
+
+  test('a Reserva criada aparece como Conflito na consulta seguinte', () => {
+    const agenda = carregarAgenda();
+    const reserva = agenda.reservar('sala-aquario', { inicio: em3('09:00'), fim: em3('10:00') }, 'Doc');
+    assert.deepEqual(agenda.consultarConflitos('sala-aquario', { inicio: em3('09:30'), fim: em3('10:30') }), [reserva]);
+    assert.deepEqual(agenda.consultarConflitos('sala-aquario', { inicio: em3('10:00'), fim: em3('11:00') }), []);
+  });
+
+  test('cada Agenda carregada parte so das Reservas do starter', () => {
+    carregarAgenda().reservar('sala-aquario', { inicio: em3('09:00'), fim: em3('10:00') }, 'Doc');
+    const agenda = carregarAgenda();
+    assert.deepEqual(agenda.consultarConflitos('sala-aquario', { inicio: em3('09:00'), fim: em3('10:00') }), []);
+    assert.equal(agenda.reservar('sala-aquario', { inicio: em3('09:00'), fim: em3('10:00') }, 'Doc').id, 'res-0003');
+  });
+
+  test('a versao da Politica de uso vem da primeira linha do arquivo', () => {
+    assert.equal(carregarAgenda().versaoDaPolitica(), '2026-11-01');
+  });
+});
