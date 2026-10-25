@@ -1,18 +1,21 @@
-// Placeholder do agente "Central de Salas": so abre a porta e responde 501.
-// O card, o SendMessage/GetTask e o host MCP chegam nas fatias 07 a 09.
-
-import { createServer } from 'node:http';
+import { criarAgentCard } from './card.ts';
+import { criarConducao } from './conducao.ts';
+import { CAMINHO_A2A, criarServidorHttp } from './entrada.ts';
+import { conectarHostMcp } from './host-mcp.ts';
+import { criarStoreDeTasks } from './task.ts';
 
 const PORTA = Number(process.env.AGENT_PORT ?? 7300);
+const URL_CARD = process.env.AGENT_CARD_URL ?? `http://127.0.0.1:7300${CAMINHO_A2A}`;
+const URL_MCP = process.env.MCP_URL ?? 'http://127.0.0.1:7301/mcp';
 
-const http = createServer((_req, res) => {
-  const corpo = JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32603, message: 'agente ainda nao implementado' } });
-  res.writeHead(501, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(corpo) });
-  res.end(corpo);
+const host = await conectarHostMcp(URL_MCP);
+const http = criarServidorHttp({
+  card: criarAgentCard(URL_CARD),
+  tasks: criarStoreDeTasks(),
+  conducao: criarConducao(host),
 });
-
 http.listen(PORTA, '127.0.0.1', () => {
-  process.stderr.write(`agente (placeholder) em http://127.0.0.1:${PORTA}\n`);
+  process.stderr.write(`agente central-de-salas em http://127.0.0.1:${PORTA}${CAMINHO_A2A} (MCP em ${URL_MCP})\n`);
 });
 
 for (const sinal of ['SIGINT', 'SIGTERM'] as const) {
