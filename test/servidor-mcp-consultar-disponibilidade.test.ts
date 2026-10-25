@@ -1,4 +1,4 @@
-// Ponto A: consultar_disponibilidade e tool inexistente, so por HTTP.
+// Ponto A: consultar_disponibilidade (inclusive as bordas da Janela de uso) e tool inexistente, so por HTTP.
 
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -41,6 +41,31 @@ describe('servidor MCP: consultar_disponibilidade', () => {
     const r = await consultar({ sala: 'sala-garagem', inicio: '2026-11-03T15:00:00-03:00', fim: '2026-11-03T16:00:00-03:00' });
     assert.equal(r.corpo?.result?.structuredContent?.livre, true);
   });
+
+  for (const [caso, inicio, fim] of [
+    ['comeca na abertura (08:00 as 10:00)', '2026-11-05T08:00:00-03:00', '2026-11-05T10:00:00-03:00'],
+    ['termina no fechamento (18:00 as 20:00)', '2026-11-05T18:00:00-03:00', '2026-11-05T20:00:00-03:00'],
+    ['termina no fechamento, pedido em UTC (21:00Z as 23:00Z)', '2026-11-06T21:00:00Z', '2026-11-06T23:00:00Z'],
+  ] as const) {
+    test(`borda da Janela de uso e aceita: ${caso}`, async () => {
+      const r = await consultar({ sala: 'sala-aquario', inicio, fim });
+      const resultado = r.corpo?.result;
+      assert.ok(!resultado.isError, textoDe(resultado));
+      assert.equal(resultado.structuredContent?.livre, true);
+    });
+  }
+
+  for (const [caso, inicio, fim] of [
+    ['comeca antes da abertura (07:30 as 08:30)', '2026-11-05T07:30:00-03:00', '2026-11-05T08:30:00-03:00'],
+    ['termina depois do fechamento (19:30 as 20:30)', '2026-11-05T19:30:00-03:00', '2026-11-05T20:30:00-03:00'],
+    ['um minuto alem do fechamento (18:01 as 20:01)', '2026-11-05T18:01:00-03:00', '2026-11-05T20:01:00-03:00'],
+  ] as const) {
+    test(`Intervalo que atravessa a borda da Janela de uso e recusado: ${caso}`, async () => {
+      const r = await consultar({ sala: 'sala-aquario', inicio, fim });
+      assert.equal(r.corpo?.result?.isError, true);
+      assert.equal(textoDe(r.corpo?.result), 'Fora da janela de uso: a politica permite reservas entre 08:00 e 20:00');
+    });
+  }
 
   for (const [caso, args, mensagem] of [
     ['Sala inexistente', { sala: 'sala-delorean', inicio: '2026-11-03T09:00:00-03:00', fim: '2026-11-03T10:00:00-03:00' }, 'Sala inexistente: sala-delorean'],
