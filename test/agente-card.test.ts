@@ -1,4 +1,4 @@
-// Ponto A: o Agent Card do agente, so por HTTP.
+// Ponto A: o Agent Card do agente, so por HTTP (com e sem AGENT_CARD_URL).
 
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -38,5 +38,20 @@ describe('agente: Agent Card', () => {
         },
       ],
     });
+  });
+});
+
+describe('agente: URL do Agent Card sem AGENT_CARD_URL', () => {
+  let agente: Processo;
+  before(async () => {
+    agente = await iniciarAgente({ env: { AGENT_CARD_URL: undefined } });
+  });
+  after(async () => { await agente.parar(); });
+
+  test('a URL publicada sai da porta do agente (AGENT_PORT)', async () => {
+    const r = await http(`${agente.url}/.well-known/agent-card.json`, { metodo: 'GET' });
+    assert.deepEqual(r.corpo?.supportedInterfaces, [
+      { url: `http://127.0.0.1:${agente.porta}/a2a`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
+    ]);
   });
 });

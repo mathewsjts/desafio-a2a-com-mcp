@@ -85,7 +85,7 @@ Variaveis de ambiente (todas opcionais, menos o segredo):
 | `REQUEST_STATE_TTL_SECONDS` | servidor MCP | `600` (existe para os testes de expiracao) |
 | `MCP_PORT` | servidor MCP | `7301` |
 | `AGENT_PORT` | agente | `7300` |
-| `AGENT_CARD_URL` | agente (URL publicada no card) | `http://127.0.0.1:7300/a2a` |
+| `AGENT_CARD_URL` | agente (URL publicada no card) | `http://127.0.0.1:<AGENT_PORT>/a2a` |
 | `MCP_URL` | agente (onde esta o servidor MCP) | `http://127.0.0.1:7301/mcp` |
 
 ### Roteiro manual (opcional)

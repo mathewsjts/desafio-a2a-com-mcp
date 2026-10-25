@@ -5,7 +5,7 @@ import { conectarHostMcp } from './host-mcp.ts';
 import { criarStoreDeTasks } from './task.ts';
 
 const PORTA = Number(process.env.AGENT_PORT ?? 7300);
-const URL_CARD = process.env.AGENT_CARD_URL ?? `http://127.0.0.1:7300${CAMINHO_A2A}`;
+const URL_CARD = process.env.AGENT_CARD_URL ?? `http://127.0.0.1:${PORTA}${CAMINHO_A2A}`;
 const URL_MCP = process.env.MCP_URL ?? 'http://127.0.0.1:7301/mcp';
 
 const host = await conectarHostMcp(URL_MCP);
