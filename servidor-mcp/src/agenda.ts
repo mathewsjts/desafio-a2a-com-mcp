@@ -19,6 +19,12 @@ export type Agenda = {
   /** Reservas da Sala que se sobrepoem ao Intervalo (semiaberto), na ordem da Agenda. */
   consultarConflitos(sala: string, intervalo: Intervalo): Reserva[];
   /**
+   * Alternativas a uma Sala ocupada: outras Salas livres no Intervalo, com
+   * capacidade maior ou igual a da pedida, por capacidade crescente e depois
+   * `id`, no maximo tres.
+   */
+  alternativas(sala: string, intervalo: Intervalo): string[];
+  /**
    * Cria a Reserva com o proximo id `res-NNNN` e a guarda em memoria. Nao
    * revalida: quem chama ja passou por `validarPedido` e checou os Conflitos.
    */
@@ -36,11 +42,12 @@ const DURACAO_MAXIMA_MS = 2 * HORA_MS;
 const ERRO_INTERVALO = 'Intervalo invalido: fim deve ser posterior a inicio';
 const ERRO_JANELA = 'Fora da janela de uso: a politica permite reservas entre 08:00 e 20:00';
 const ERRO_DURACAO = 'Duracao acima do limite: a politica permite no maximo 2 horas';
+const MAXIMO_DE_ALTERNATIVAS = 3;
 
 export function criarAgenda(dados: { salas: Sala[]; reservas: Reserva[]; versaoDaPolitica: () => string }): Agenda {
   const salas = dados.salas;
   const reservas = dados.reservas.map((r) => ({ ...r, ...normalizar(r) }));
-  return {
+  const agenda: Agenda = {
     listarSalas: () => salas,
     validarPedido(pedido) {
       if (!salas.some((s) => s.id === pedido.sala)) return { ok: false, erro: `Sala inexistente: ${pedido.sala}` };
@@ -62,6 +69,15 @@ export function criarAgenda(dados: { salas: Sala[]; reservas: Reserva[]; versaoD
         return outro.inicio < fim && inicio < outro.fim;
       });
     },
+    alternativas(sala, intervalo) {
+      const capacidade = salas.find((s) => s.id === sala)?.capacidade ?? Infinity;
+      return salas
+        .filter((s) => s.id !== sala && s.capacidade >= capacidade)
+        .filter((s) => agenda.consultarConflitos(s.id, intervalo).length === 0)
+        .sort((a, b) => a.capacidade - b.capacidade || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .slice(0, MAXIMO_DE_ALTERNATIVAS)
+        .map((s) => s.id);
+    },
     reservar(sala, intervalo, responsavel) {
       const reserva = { id: proximoId(reservas), sala, ...normalizar(intervalo), responsavel };
       reservas.push(reserva);
@@ -69,6 +85,7 @@ export function criarAgenda(dados: { salas: Sala[]; reservas: Reserva[]; versaoD
     },
     versaoDaPolitica: dados.versaoDaPolitica,
   };
+  return agenda;
 }
 
 /** `res-NNNN` seguinte ao maior numero entre as Reservas existentes. */

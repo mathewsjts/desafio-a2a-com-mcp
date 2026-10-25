@@ -247,3 +247,41 @@ describe('Agenda: reservar', () => {
     assert.equal(carregarAgenda().versaoDaPolitica(), '2026-11-01');
   });
 });
+
+describe('Agenda: Alternativas', () => {
+  test('Salas livres com capacidade maior ou igual a da pedida, sem a propria Sala', () => {
+    const agenda = carregarAgenda();
+    assert.deepEqual(agenda.alternativas('sala-garagem', { inicio: em3('14:00'), fim: em3('15:00') }), ['sala-fusca', 'sala-mirante']);
+  });
+
+  test('no maximo tres, por capacidade crescente e, no empate, por id', () => {
+    // garagem e fusca tem 12 lugares; no arquivo a garagem vem antes, no id a fusca.
+    const agenda = carregarAgenda();
+    assert.deepEqual(agenda.alternativas('sala-aquario', { inicio: em3('09:00'), fim: em3('10:00') }), [
+      'sala-porao',
+      'sala-fusca',
+      'sala-garagem',
+    ]);
+  });
+
+  test('Sala ocupada no Intervalo fica de fora, e a lista anda para a proxima', () => {
+    const agenda = carregarAgenda();
+    // A garagem tem res-0001 das 14:00 as 15:00.
+    assert.deepEqual(agenda.alternativas('sala-aquario', { inicio: em3('14:30'), fim: em3('15:30') }), [
+      'sala-porao',
+      'sala-fusca',
+      'sala-mirante',
+    ]);
+  });
+
+  test('uma Reserva criada passa a contar nas Alternativas seguintes', () => {
+    const agenda = carregarAgenda();
+    agenda.reservar('sala-mirante', { inicio: em3('14:00'), fim: em3('15:00') }, 'Doc');
+    assert.deepEqual(agenda.alternativas('sala-garagem', { inicio: em3('14:00'), fim: em3('15:00') }), ['sala-fusca']);
+  });
+
+  test('lista vazia quando nenhuma Sala maior ou igual esta livre', () => {
+    const agenda = carregarAgenda();
+    assert.deepEqual(agenda.alternativas('sala-mirante', { inicio: em3('09:00'), fim: em3('10:00') }), []);
+  });
+});
