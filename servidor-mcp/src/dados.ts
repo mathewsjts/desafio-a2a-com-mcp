@@ -11,3 +11,9 @@ export type Sala = { id: string; nome: string; capacidade: number; recursos: str
 export function lerSalas(): Sala[] {
   return JSON.parse(readFileSync(join(PASTA_DADOS, 'salas.json'), 'utf8')) as Sala[];
 }
+
+export type Reserva = { id: string; sala: string; inicio: string; fim: string; responsavel: string };
+
+export function lerReservas(): Reserva[] {
+  return JSON.parse(readFileSync(join(PASTA_DADOS, 'reservas.json'), 'utf8')) as Reserva[];
+}
