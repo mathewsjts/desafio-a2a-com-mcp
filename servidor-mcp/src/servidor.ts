@@ -1,0 +1,78 @@
+// McpServer "Central de Salas": identidade, capabilities, tools e resources.
+// Criado por request (o SDK chama a fabrica a cada POST), entao todo estado de
+// dominio vive fora daqui.
+
+import { McpServer } from '@modelcontextprotocol/server';
+import * as z from 'zod';
+import { lerSalas } from './dados.ts';
+
+const salas = lerSalas();
+
+const SalaSchema = z.object({
+  id: z.string(),
+  nome: z.string(),
+  capacidade: z.number().int(),
+  recursos: z.array(z.string()),
+});
+
+/** Resultado de sucesso: structuredContent e o mesmo JSON num bloco de texto. */
+function resultado<T extends Record<string, unknown>>(dados: T) {
+  return { content: [{ type: 'text' as const, text: JSON.stringify(dados) }], structuredContent: dados };
+}
+
+function naoImplementada(tool: string) {
+  return { isError: true, content: [{ type: 'text' as const, text: `Nao implementado: ${tool}` }] };
+}
+
+export function criarServidorMcp(): McpServer {
+  const servidor = new McpServer(
+    { name: 'central-de-salas', version: '1.0.0' },
+    { capabilities: { tools: {}, resources: {} } },
+  );
+
+  servidor.registerTool(
+    'listar_salas',
+    {
+      description: 'Lista todas as salas com capacidade e recursos.',
+      outputSchema: z.object({ salas: z.array(SalaSchema) }),
+    },
+    async () => resultado({ salas }),
+  );
+
+  // Declaradas ja nesta fatia para que a descoberta fique completa; o
+  // comportamento chega com a Agenda (fatias 03 e 04).
+  servidor.registerTool(
+    'consultar_disponibilidade',
+    {
+      description: 'Diz se uma sala esta livre num intervalo e, se nao estiver, quais reservas conflitam.',
+      inputSchema: z.object({ sala: z.string(), inicio: z.string(), fim: z.string() }),
+      outputSchema: z.object({
+        sala: z.string(),
+        livre: z.boolean(),
+        conflitos: z.array(z.object({ id: z.string(), inicio: z.string(), fim: z.string(), responsavel: z.string() })),
+      }),
+    },
+    async () => naoImplementada('consultar_disponibilidade'),
+  );
+
+  servidor.registerTool(
+    'reservar_sala',
+    {
+      description: 'Reserva uma sala num intervalo, respeitando a politica de uso.',
+      inputSchema: z.object({ sala: z.string(), inicio: z.string(), fim: z.string(), responsavel: z.string() }),
+      outputSchema: z.object({
+        reserva: z.string().nullable().optional(),
+        reservado: z.boolean().optional(),
+        sala: z.string().nullable().optional(),
+        inicio: z.string().nullable().optional(),
+        fim: z.string().nullable().optional(),
+        responsavel: z.string().nullable().optional(),
+        politica: z.string().nullable().optional(),
+        motivo: z.string().nullable().optional(),
+      }),
+    },
+    async () => naoImplementada('reservar_sala'),
+  );
+
+  return servidor;
+}
