@@ -12,7 +12,7 @@ import {
   type DiscoverResult,
   type InputRequiredResult,
 } from '@modelcontextprotocol/client';
-import { novoTraceparent as traceparent } from './trace.ts';
+import { novoTraceparent } from './trace.ts';
 
 export const PROTOCOLO_MCP = '2026-07-28';
 export const TOOL_RESERVAR = 'reservar_sala';
@@ -21,7 +21,7 @@ export const URI_POLITICA = 'politica://uso';
 /** Resultado cru do `tools/call`: `complete` (CallToolResult) ou `input_required`. */
 export type ResultadoTool = CallToolResult | InputRequiredResult;
 
-/** Rodada de retry MRTR (ticket 09): o que vai junto dos argumentos originais. */
+/** Rodada de retry MRTR: o que vai junto dos argumentos originais. */
 export type Retry = {
   inputResponses: Record<string, unknown>;
   /** Ecoado byte a byte; o agente nunca o decodifica. */
@@ -76,7 +76,7 @@ export async function conectarHostMcp(url: string): Promise<HostMcp> {
 
   return {
     async descobrirTools(traceId) {
-      const r = await client.request({ method: 'tools/list', params: { _meta: { traceparent: traceparent(traceId) } } });
+      const r = await client.request({ method: 'tools/list', params: { _meta: { traceparent: novoTraceparent(traceId) } } });
       if (!r.tools.some((t) => t.name === TOOL_RESERVAR)) {
         throw new Error(`Tool ${TOOL_RESERVAR} ausente no servidor MCP`);
       }
@@ -85,7 +85,7 @@ export async function conectarHostMcp(url: string): Promise<HostMcp> {
     async lerVersaoDaPolitica(traceId) {
       const r = await client.request({
         method: 'resources/read',
-        params: { uri: URI_POLITICA, _meta: { traceparent: traceparent(traceId) } },
+        params: { uri: URI_POLITICA, _meta: { traceparent: novoTraceparent(traceId) } },
       });
       const conteudo = r.contents[0];
       const texto = conteudo && 'text' in conteudo ? conteudo.text : '';
@@ -98,7 +98,7 @@ export async function conectarHostMcp(url: string): Promise<HostMcp> {
       const r = await client.request(
         {
           method: 'tools/call',
-          params: { name: TOOL_RESERVAR, arguments: argumentos, ...retry, _meta: { traceparent: traceparent(traceId) } },
+          params: { name: TOOL_RESERVAR, arguments: argumentos, ...retry, _meta: { traceparent: novoTraceparent(traceId) } },
         },
         { allowInputRequired: true },
       );

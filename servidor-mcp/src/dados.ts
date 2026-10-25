@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const PASTA_DADOS = fileURLToPath(new URL('../../dados/', import.meta.url));
+const PASTA_DADOS = fileURLToPath(new URL('../../dados/', import.meta.url));
 
 export type Sala = { id: string; nome: string; capacidade: number; recursos: string[] };
 

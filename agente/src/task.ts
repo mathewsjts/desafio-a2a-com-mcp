@@ -6,6 +6,7 @@
 // continuacao MCP pendente, que nunca e serializada.
 
 import { randomBytes } from 'node:crypto';
+import type { Pedido } from './pedido.ts';
 
 export type EstadoTask =
   | 'TASK_STATE_SUBMITTED'
@@ -50,14 +51,20 @@ export type Mensagem = {
 export type Artifact = { artifactId: string; name: string; parts: Part[] };
 
 /**
- * Estado MCP pendente de uma Pausa (preenchido pela ponte, ticket 09).
+ * Estado MCP pendente de uma Pausa (preenchido pela ponte, em conducao.ts).
  * Fica so no store: `paraWire` nunca o inclui.
  */
 export type Continuacao = {
+  /** Chave unica de `inputRequests`, devolvida no retry. */
   chave: string;
+  /** Opaco: volta ao servidor byte a byte. */
   requestState: string;
-  argumentos: Record<string, unknown>;
+  /** Os `arguments` do `tools/call` original, repetidos no retry. */
+  argumentos: Pedido;
+  /** O enum da Escolha, na ordem do servidor. */
   alternativas: string[];
+  /** Versao da Politica de uso lida na primeira rodada (vai no artifact se o retry concluir). */
+  politica: string;
 };
 
 export type Task = {
@@ -70,8 +77,6 @@ export type Task = {
   mensagemDeStatus?: Mensagem;
   readonly historico: Mensagem[];
   readonly artifacts: Artifact[];
-  /** Versao da Politica de uso que o agente leu para esta Task (vai no artifact). */
-  versaoDaPolitica?: string;
   continuacao?: Continuacao;
 };
 

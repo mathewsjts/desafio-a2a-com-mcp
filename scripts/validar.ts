@@ -21,7 +21,7 @@ import { iniciarAgente, iniciarServidorMcp, RAIZ, type Processo } from '../test/
 const PORTA_MCP = Number(process.env.MCP_PORT ?? 7301);
 const PORTA_AGENTE = Number(process.env.AGENT_PORT ?? 7300);
 
-export function acharPython(): string | undefined {
+function acharPython(): string | undefined {
   const candidatos = [
     process.env.PYTHON,
     'python3.13',

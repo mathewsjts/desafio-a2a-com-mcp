@@ -61,8 +61,8 @@ export type OpcoesEntrada = {
   conducao: Conducao;
 };
 
-export function criarServidorHttp(op: OpcoesEntrada): Server {
-  const { tasks, conducao } = op;
+export function criarServidorHttp(opcoes: OpcoesEntrada): Server {
+  const { tasks, conducao } = opcoes;
 
   function obterTask(id: string) {
     const task = tasks.obter(id);
@@ -135,7 +135,7 @@ export function criarServidorHttp(op: OpcoesEntrada): Server {
     try {
       const caminho = (req.url ?? '').split('?')[0];
       if (req.method === 'GET' && caminho === CAMINHO_CARD) {
-        responderJson(res, 200, op.card);
+        responderJson(res, 200, opcoes.card);
         return;
       }
       if (req.method === 'POST' && caminho === CAMINHO_A2A) {

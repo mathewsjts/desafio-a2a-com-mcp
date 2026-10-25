@@ -18,7 +18,7 @@ export type ReservaFeita = {
 };
 
 /** O que a Pausa guarda do input_required: tudo opaco, menos o enum da Escolha. */
-export type SolicitacaoDeEscolha = Omit<Continuacao, 'argumentos'>;
+export type SolicitacaoDeEscolha = Pick<Continuacao, 'chave' | 'requestState' | 'alternativas'>;
 
 /** Desfecho de um `tools/call reservar_sala`, ja na linguagem da Task. */
 export type Desfecho =
@@ -47,7 +47,8 @@ function lerSolicitacaoDeEscolha(r: InputRequiredResult): SolicitacaoDeEscolha |
   return { chave, requestState: r.requestState, alternativas };
 }
 
-const texto = (r: { content?: unknown }) =>
+/** Texto concatenado dos blocos `content` de um resultado de tool. */
+const textoDoResultado = (r: { content?: unknown }) =>
   (Array.isArray(r.content) ? r.content : [])
     .map((c) => (c && typeof c === 'object' && 'text' in c && typeof c.text === 'string' ? c.text : ''))
     .join(' ');
@@ -63,37 +64,41 @@ export function interpretarResultado(r: ResultadoTool): Desfecho {
     if (!escolha) return { tipo: 'falha', mensagem: `input_required inesperado de reservar_sala: ${JSON.stringify(r.inputRequests)}` };
     return { tipo: 'pausa', escolha };
   }
-  if (r.isError) return { tipo: 'falha', mensagem: texto(r) };
-  const s = (r.structuredContent ?? {}) as Record<string, unknown>;
-  if (s.reservado === true) {
+  if (r.isError) return { tipo: 'falha', mensagem: textoDoResultado(r) };
+  const estruturado = (r.structuredContent ?? {}) as Record<string, unknown>;
+  if (estruturado.reservado === true) {
     return {
       tipo: 'concluida',
       reserva: {
-        reserva: String(s.reserva),
-        sala: String(s.sala),
-        inicio: String(s.inicio),
-        fim: String(s.fim),
-        responsavel: String(s.responsavel),
+        reserva: String(estruturado.reserva),
+        sala: String(estruturado.sala),
+        inicio: String(estruturado.inicio),
+        fim: String(estruturado.fim),
+        responsavel: String(estruturado.responsavel),
       },
     };
   }
-  if (s.reservado === false) return { tipo: 'sem-reserva', mensagem: texto(r) };
-  return { tipo: 'falha', mensagem: `Resultado inesperado de reservar_sala: ${texto(r)}` };
+  if (estruturado.reservado === false) return { tipo: 'sem-reserva', mensagem: textoDoResultado(r) };
+  return { tipo: 'falha', mensagem: `Resultado inesperado de reservar_sala: ${textoDoResultado(r)}` };
 }
 
 /** A linha da Pausa: so os ids, na ordem do enum, sem nada variavel. */
 export const linhaDeAlternativas = (alternativas: readonly string[]) => `alternativas: ${alternativas.join(', ')}`;
 
 /**
- * Aplica o Desfecho a Task (que esta em WORKING). `argumentos` sao os do
- * `tools/call` original, guardados na Pausa para o retry. `recusa` diz se esta
- * rodada foi o retry com `decline` de uma continuacao: so ela leva a CANCELED.
+ * A rodada de `tools/call` cujo Desfecho se aplica: os `argumentos` do
+ * `tools/call` original e a `politica` lida (guardados na Pausa para o retry),
+ * e se ela foi o retry com `decline` de uma continuacao (`recusa`), a unica
+ * rodada que leva a CANCELED.
  */
-function aplicar(task: Task, d: Desfecho, politica: string, argumentos: Record<string, unknown>, recusa: boolean): void {
+type Rodada = Pick<Continuacao, 'argumentos' | 'politica'> & { recusa: boolean };
+
+/** Aplica o Desfecho a Task (que esta em WORKING). */
+function aplicar(task: Task, d: Desfecho, { argumentos, politica, recusa }: Rodada): void {
   switch (d.tipo) {
     case 'pausa':
       // A ponte: input_required -> TASK_STATE_INPUT_REQUIRED, com a continuacao MCP guardada so no store.
-      task.continuacao = { ...d.escolha, argumentos };
+      task.continuacao = { ...d.escolha, argumentos, politica };
       responder(task, 'TASK_STATE_INPUT_REQUIRED', linhaDeAlternativas(d.escolha.alternativas));
       return;
     case 'concluida': {
@@ -130,10 +135,8 @@ export function criarConducao(host: HostMcp): Conducao {
   async function reservar(task: Task, pedido: Pedido): Promise<void> {
     await host.descobrirTools(task.traceId);
     const politica = await host.lerVersaoDaPolitica(task.traceId);
-    task.versaoDaPolitica = politica;
-    const argumentos = { ...pedido };
-    const resultado = await host.reservarSala(argumentos, task.traceId);
-    aplicar(task, interpretarResultado(resultado), politica, argumentos, false);
+    const resultado = await host.reservarSala(pedido, task.traceId);
+    aplicar(task, interpretarResultado(resultado), { argumentos: pedido, politica, recusa: false });
   }
 
   return {
@@ -166,7 +169,7 @@ export function criarConducao(host: HostMcp): Conducao {
       // Task, chegando durante o retry, ja encontra WORKING.
       mover(task, 'TASK_STATE_WORKING');
       task.continuacao = undefined;
-      const { chave, requestState, argumentos } = continuacao;
+      const { chave, requestState, argumentos, politica } = continuacao;
       try {
         // A ponte, lado de saida: o requestState volta ao servidor como veio, com o trace-id da Task.
         const recusa = resposta.tipo === 'recusa';
@@ -174,7 +177,7 @@ export function criarConducao(host: HostMcp): Conducao {
           [chave]: recusa ? { action: 'decline' } : { action: 'accept', content: { sala: resposta.sala } },
         };
         const resultado = await host.reservarSala(argumentos, task.traceId, { inputResponses, requestState });
-        aplicar(task, interpretarResultado(resultado), task.versaoDaPolitica ?? '', argumentos, recusa);
+        aplicar(task, interpretarResultado(resultado), { argumentos, politica, recusa });
       } catch (e) {
         responder(task, 'TASK_STATE_FAILED', mensagemDeErro(e));
       }

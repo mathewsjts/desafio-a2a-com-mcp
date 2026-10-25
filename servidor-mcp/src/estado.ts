@@ -14,7 +14,7 @@ export type Selado = {
 };
 
 /** Validade de um requestState: dez minutos. */
-export const TTL_PADRAO_SEGUNDOS = 600;
+const TTL_PADRAO_SEGUNDOS = 600;
 
 /** Tamanho minimo da chave HMAC, em bytes (o mesmo piso do SDK). */
 const BYTES_MINIMOS_DO_SEGREDO = 32;
