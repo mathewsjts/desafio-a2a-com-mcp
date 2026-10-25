@@ -4,9 +4,9 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
-import { lerSalas } from './dados.ts';
+import { carregarAgenda } from './agenda.ts';
 
-const salas = lerSalas();
+const agenda = carregarAgenda();
 
 const SalaSchema = z.object({
   id: z.string(),
@@ -18,6 +18,11 @@ const SalaSchema = z.object({
 /** Resultado de sucesso: structuredContent e o mesmo JSON num bloco de texto. */
 function resultado<T extends Record<string, unknown>>(dados: T) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(dados) }], structuredContent: dados };
+}
+
+/** Erro de dominio: isError com a mensagem exata no bloco de texto. */
+function erroDeDominio(mensagem: string) {
+  return { isError: true, content: [{ type: 'text' as const, text: mensagem }] };
 }
 
 function naoImplementada(tool: string) {
@@ -36,11 +41,9 @@ export function criarServidorMcp(): McpServer {
       description: 'Lista todas as salas com capacidade e recursos.',
       outputSchema: z.object({ salas: z.array(SalaSchema) }),
     },
-    async () => resultado({ salas }),
+    async () => resultado({ salas: agenda.listarSalas() }),
   );
 
-  // Declaradas ja nesta fatia para que a descoberta fique completa; o
-  // comportamento chega com a Agenda (fatias 03 e 04).
   servidor.registerTool(
     'consultar_disponibilidade',
     {
@@ -52,9 +55,18 @@ export function criarServidorMcp(): McpServer {
         conflitos: z.array(z.object({ id: z.string(), inicio: z.string(), fim: z.string(), responsavel: z.string() })),
       }),
     },
-    async () => naoImplementada('consultar_disponibilidade'),
+    async (args) => {
+      const validacao = agenda.validarPedido(args);
+      if (!validacao.ok) return erroDeDominio(validacao.erro);
+      const conflitos = agenda
+        .consultarConflitos(validacao.sala, validacao.intervalo)
+        .map(({ id, inicio, fim, responsavel }) => ({ id, inicio, fim, responsavel }));
+      return resultado({ sala: validacao.sala, livre: conflitos.length === 0, conflitos });
+    },
   );
 
+  // Declarada ja para que a descoberta fique completa; o comportamento chega
+  // com a fatia 04.
   servidor.registerTool(
     'reservar_sala',
     {
