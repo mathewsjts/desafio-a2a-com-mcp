@@ -3,7 +3,7 @@
 // do servidor MCP nem do agente.
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { request as httpRequest } from 'node:http';
+import { createServer as createHttpServer, request as httpRequest } from 'node:http';
 import { createServer, connect } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -335,4 +335,59 @@ export function textoDaMensagem(mensagem: any): string {
 /** trace-id (32 hex) de um traceparent W3C, ou undefined. */
 export function traceIdDe(traceparent: unknown): string | undefined {
   return typeof traceparent === 'string' ? /^00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/.exec(traceparent)?.[1] : undefined;
+}
+
+// ---------------------------------------------------------------- espiao MCP
+
+/** Um POST que passou pelo espiao: corpos crus e ja interpretados como JSON. */
+export type Troca = { bruto: string; pedido: any; brutoDaResposta: string; resposta: any };
+
+export type EspiaoMcp = {
+  /** Base do espiao: o agente usa `${espiao.url}/mcp` no lugar de `${srv.url}/mcp`. */
+  readonly url: string;
+  /** As trocas ate agora, na ordem em que as respostas voltaram. */
+  trocas(): Troca[];
+  parar(): Promise<void>;
+};
+
+/**
+ * Proxy HTTP entre o agente e o servidor MCP em `destino` (ex.: `srv.url`).
+ * Repassa cada request sem alteracao e guarda os corpos dos dois lados, para o
+ * teste ver o que o agente mandou de fato (argumentos, inputResponses,
+ * requestState) sem olhar dentro do agente.
+ */
+export async function iniciarEspiaoMcp(destino: string): Promise<EspiaoMcp> {
+  const trocas: Troca[] = [];
+  const json = (bruto: string) => { try { return JSON.parse(bruto); } catch { return undefined; } };
+  const servidor = createHttpServer((req, res) => {
+    const pedacos: Buffer[] = [];
+    req.on('data', (p: Buffer) => pedacos.push(p));
+    req.on('end', () => {
+      const bruto = Buffer.concat(pedacos).toString('utf8');
+      const repasse = httpRequest(new URL(req.url ?? '/', destino), { method: req.method, headers: req.headers }, (r) => {
+        const volta: Buffer[] = [];
+        r.on('data', (p: Buffer) => volta.push(p));
+        r.on('end', () => {
+          const corpo = Buffer.concat(volta);
+          const brutoDaResposta = corpo.toString('utf8');
+          trocas.push({ bruto, pedido: json(bruto), brutoDaResposta, resposta: json(brutoDaResposta) });
+          const headers = { ...r.headers };
+          delete headers['transfer-encoding'];
+          delete headers.connection;
+          headers['content-length'] = String(corpo.length);
+          res.writeHead(r.statusCode ?? 502, headers);
+          res.end(corpo);
+        });
+      });
+      repasse.on('error', () => { res.writeHead(502); res.end(); });
+      repasse.end(bruto);
+    });
+  });
+  const porta = await portaLivre();
+  await new Promise<void>((ok) => servidor.listen(porta, '127.0.0.1', ok));
+  return {
+    url: `http://127.0.0.1:${porta}`,
+    trocas: () => [...trocas],
+    parar: () => new Promise<void>((ok) => { servidor.closeAllConnections(); servidor.close(() => ok()); }),
+  };
 }

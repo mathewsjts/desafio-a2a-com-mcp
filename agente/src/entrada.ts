@@ -74,10 +74,14 @@ export function criarServidorHttp(op: OpcoesEntrada): Server {
       const texto = mensagem.parts.map((p) => p.text).join(' ');
       if (mensagem.taskId !== undefined) {
         // Mensagem para uma Task existente. Terminal nunca volta a WORKING, e a
-        // Task nao muda. A continuacao de uma Pausa e a ponte (ticket 09).
+        // Task nao muda. Fora disso, so a Pausa espera o cliente: a ponte.
         const task = obterTask(mensagem.taskId);
         if (ehTerminal(task.estado)) throw new ErroA2a(-32004, `Task ${task.id} esta em estado terminal (${task.estado})`);
-        throw new ErroA2a(-32603, `Continuacao de Task ainda nao suportada (${task.estado})`);
+        if (task.estado !== 'TASK_STATE_INPUT_REQUIRED') {
+          throw new ErroA2a(-32004, `Task ${task.id} nao espera resposta do cliente (${task.estado})`);
+        }
+        await conducao.continuar(task, mensagem, texto);
+        return { task: paraWire(task) };
       }
       const task = tasks.abrir(mensagem, traceIdDoHeader(req.headers.traceparent));
       await conducao.executarPedido(task, texto);

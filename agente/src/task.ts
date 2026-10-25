@@ -15,10 +15,15 @@ export type EstadoTask =
   | 'TASK_STATE_FAILED'
   | 'TASK_STATE_CANCELED';
 
-/** Transicoes permitidas (spec, "Maquina de estados"). Terminais nao tem saida. */
+/**
+ * Transicoes permitidas (spec, "Maquina de estados"). Terminais nao tem saida.
+ * A Recusa (INPUT_REQUIRED -> CANCELED "depois do retry com decline") passa
+ * por WORKING durante o retry, como a Escolha: assim a Task nunca aceita duas
+ * continuacoes ao mesmo tempo, e uma falha do MCP no retry ainda vira FAILED.
+ */
 const TRANSICOES: Readonly<Record<EstadoTask, readonly EstadoTask[]>> = {
   TASK_STATE_SUBMITTED: ['TASK_STATE_WORKING'],
-  TASK_STATE_WORKING: ['TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_INPUT_REQUIRED'],
+  TASK_STATE_WORKING: ['TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_CANCELED'],
   TASK_STATE_INPUT_REQUIRED: ['TASK_STATE_WORKING', 'TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_CANCELED'],
   TASK_STATE_COMPLETED: [],
   TASK_STATE_FAILED: [],
