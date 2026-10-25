@@ -43,6 +43,22 @@ const DESCOBERTA_PREVIA: DiscoverResult = {
   capabilities: { tools: {}, resources: {} },
 };
 
+/**
+ * O `fetch` do transporte: uma falha de rede (servidor MCP fora do ar, porta
+ * fechada) vira um erro que diz o que aconteceu, com a causa original. A Task
+ * termina em FAILED com essa mensagem. Erros de JSON-RPC nao passam por aqui:
+ * chegam numa resposta HTTP e o SDK os lanca com a mensagem do servidor.
+ */
+const fetchDoTransporte: typeof fetch = async (entrada, init) => {
+  try {
+    return await fetch(entrada, init);
+  } catch (e) {
+    if (!(e instanceof TypeError)) throw e; // AbortError e afins seguem como vieram
+    const causa = e.cause instanceof Error ? ` (${e.cause.message})` : '';
+    throw new Error(`Servidor MCP indisponivel: ${e.message}${causa}`, { cause: e });
+  }
+};
+
 export async function conectarHostMcp(url: string): Promise<HostMcp> {
   const client = new Client(
     { name: 'agente-central-de-salas', version: '1.0.0' },
@@ -54,7 +70,7 @@ export async function conectarHostMcp(url: string): Promise<HostMcp> {
   );
   // Com `prior`, a conexao nao toca a rede: o agente sobe mesmo com o servidor
   // MCP fora do ar, e a mesma instancia sobrevive a reinicios dele (HTTP stateless).
-  await client.connect(new StreamableHTTPClientTransport(new URL(url)), {
+  await client.connect(new StreamableHTTPClientTransport(new URL(url), { fetch: fetchDoTransporte }), {
     prior: { kind: 'modern', discover: DESCOBERTA_PREVIA },
   });
 

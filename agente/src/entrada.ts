@@ -10,6 +10,8 @@ import { traceIdDoHeader } from './trace.ts';
 
 export const CAMINHO_CARD = '/.well-known/agent-card.json';
 export const CAMINHO_A2A = '/a2a';
+/** Unica versao do A2A atendida (header `A2A-Version`). */
+export const VERSAO_A2A = '1.0';
 
 /** Erro JSON-RPC com codigo, levado ate a resposta. */
 export class ErroA2a extends Error {
@@ -103,6 +105,12 @@ export function criarServidorHttp(op: OpcoesEntrada): Server {
       return;
     }
     const { id, method } = corpo;
+    // ADR 0001: header ausente vale como 1.0; so um valor explicito diferente e recusado.
+    const versao = req.headers['a2a-version'];
+    if (versao !== undefined && versao !== VERSAO_A2A) {
+      responderJson(res, 200, erroJsonRpc(id, -32009, `Unsupported A2A version: ${versao} (supported: ${VERSAO_A2A})`));
+      return;
+    }
     const metodo = Object.hasOwn(metodos, method) ? metodos[method] : undefined;
     if (!metodo) {
       responderJson(res, 200, erroJsonRpc(id, -32601, `Method not found: ${method}`));
