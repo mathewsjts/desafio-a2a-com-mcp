@@ -5,6 +5,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
 import { lerSalas } from './dados.ts';
+import { registrarPolitica } from './politica.ts';
 
 const salas = lerSalas();
 
@@ -73,6 +74,8 @@ export function criarServidorMcp(): McpServer {
     },
     async () => naoImplementada('reservar_sala'),
   );
+
+  registrarPolitica(servidor);
 
   return servidor;
 }
