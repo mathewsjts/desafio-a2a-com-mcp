@@ -143,15 +143,15 @@ export function criarConducao(host: HostMcp): Conducao {
       try {
         await reservar(task, pedido);
       } catch (e) {
-        // Erro de JSON-RPC ou falha de transporte do MCP (ticket 08 refina e testa).
+        // Erro de JSON-RPC ou falha de transporte do MCP.
         responder(task, 'TASK_STATE_FAILED', mensagemDeErro(e));
       }
     },
 
     async continuar(task, mensagem, texto) {
-      task.historico.push(mensagem);
       const continuacao = task.continuacao;
       if (!continuacao) throw new Error(`Task ${task.id} sem continuacao MCP guardada (${task.estado})`);
+      task.historico.push(mensagem);
       const resposta = interpretarResposta(texto, continuacao.alternativas);
       if (!resposta) {
         // Resposta invalida: a Pausa fica como esta, sem chamar o MCP.

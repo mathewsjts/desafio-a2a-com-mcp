@@ -161,6 +161,15 @@ describe('agente: taskId desconhecido e Task terminal', () => {
     assert.equal(task.status.state, 'TASK_STATE_FAILED');
     await recusaTerminal(task.id, pedidoLivre('09'));
   });
+
+  test('SendMessage a uma Task CANCELED recebe -32004 e a Task nao muda', async () => {
+    // Garagem no dia 3, das 14 as 15: ocupada por res-0001 nos dados do starter.
+    const pausada = taskDe(await enviarMensagem(url, 'reservar sala=sala-garagem inicio=2026-11-03T14:00:00-03:00 fim=2026-11-03T15:00:00-03:00 responsavel=Biff'));
+    assert.equal(pausada.status.state, 'TASK_STATE_INPUT_REQUIRED');
+    const cancelada = taskDe(await enviarMensagem(url, 'escolha=recusar', { taskId: pausada.id }));
+    assert.equal(cancelada.status.state, 'TASK_STATE_CANCELED');
+    await recusaTerminal(cancelada.id, 'escolha=sala-fusca');
+  });
 });
 
 describe('agente: servidor MCP fora do ar', () => {
