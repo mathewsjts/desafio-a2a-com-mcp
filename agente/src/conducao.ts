@@ -56,7 +56,7 @@ const textoDoResultado = (r: { content?: unknown }) =>
 /**
  * O ponto em que o resultado MCP vira estado A2A. Erros de JSON-RPC e de
  * transporte nao chegam aqui: lancam em `host.reservarSala` e viram falha em
- * `executar`.
+ * `executarPedido` ou `continuar`.
  */
 export function interpretarResultado(r: ResultadoTool): Desfecho {
   if (isInputRequiredResult(r)) {
