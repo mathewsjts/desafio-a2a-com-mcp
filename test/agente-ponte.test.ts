@@ -8,12 +8,15 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   enviarMensagem,
+  http,
   iniciarAgente,
   iniciarEspiaoMcp,
   iniciarServidorMcp,
   mcp,
+  novoTraceparent,
   obterTask,
   taskDe,
+  traceIdDe,
   type EspiaoMcp,
   type Processo,
 } from './harness.ts';
@@ -130,5 +133,133 @@ describe('agente: a ponte (Pausa e continuacao)', () => {
     const outra = await pausar(pedido('sala-garagem', '05', '12:00', '13:00'));
     const cancelada = taskDe(await enviarMensagem(url, 'escolha=recusar', { taskId: outra.id }));
     assert.deepEqual(cancelada.status.message.parts, task.status.message.parts);
+  });
+
+  test('texto qualquer ou Escolha fora do enum durante a Pausa mantem a Task pausada, repete as Alternativas e nao chama o MCP', async () => {
+    await ocupar('sala-garagem', '06', '10:00', '11:00');
+    const pausada = await pausar(pedido('sala-garagem', '06', '10:00', '11:00'));
+    const trocasAntes = espiao.trocas().length;
+    const logsAntes = srv.logs().length;
+
+    let historico = pausada.history;
+    for (const texto of ['oi, tudo bem?', 'escolha=sala-aquario', 'escolha=', 'escolha sala-fusca', 'reservar sala=sala-fusca']) {
+      const task = taskDe(await enviarMensagem(url, texto, { taskId: pausada.id, messageId: `msg-${historico.length}` }));
+      assert.equal(task?.status?.state, 'TASK_STATE_INPUT_REQUIRED', `${texto}: ${JSON.stringify(task)}`);
+      assert.deepEqual(task.status.message.parts, [{ text: 'alternativas: sala-fusca, sala-mirante' }]);
+      assert.deepEqual(task.history, [
+        ...historico,
+        { messageId: `msg-${historico.length}`, role: 'ROLE_USER', parts: [{ text: texto }], taskId: pausada.id },
+        task.status.message,
+      ]);
+      historico = task.history;
+    }
+    assert.equal(espiao.trocas().length, trocasAntes, 'nenhum request MCP durante as respostas invalidas');
+    assert.equal(srv.logs().length, logsAntes);
+
+    // A Pausa continua valida depois das respostas invalidas.
+    const concluida = taskDe(await enviarMensagem(url, 'escolha=sala-fusca', { taskId: pausada.id }));
+    assert.equal(concluida.status.state, 'TASK_STATE_COMPLETED', JSON.stringify(concluida));
+  });
+
+  test('se a Alternativa escolhida foi ocupada por outra Task, a Task volta a Pausa com as novas Alternativas e a continuacao nova', async () => {
+    await ocupar('sala-garagem', '09', '10:00', '11:00');
+    const antes = espiao.trocas().length;
+    const pausada = await pausar(pedido('sala-garagem', '09', '10:00', '11:00'));
+
+    const outra = taskDe(await enviarMensagem(url, pedido('sala-fusca', '09', '10:00', '11:00', 'Biff')));
+    assert.equal(outra.status.state, 'TASK_STATE_COMPLETED', JSON.stringify(outra));
+
+    const repausada = taskDe(await enviarMensagem(url, 'escolha=sala-fusca', { taskId: pausada.id }));
+    assert.equal(repausada.status.state, 'TASK_STATE_INPUT_REQUIRED', JSON.stringify(repausada));
+    assert.deepEqual(repausada.status.message.parts, [{ text: 'alternativas: sala-mirante' }]);
+    assert.deepEqual(repausada.artifacts, []);
+
+    // A Escolha agora e conferida contra o enum novo.
+    const invalida = taskDe(await enviarMensagem(url, 'escolha=sala-fusca', { taskId: pausada.id }));
+    assert.deepEqual(invalida.status.message.parts, [{ text: 'alternativas: sala-mirante' }]);
+
+    const concluida = taskDe(await enviarMensagem(url, 'escolha=sala-mirante', { taskId: pausada.id }));
+    assert.equal(concluida.status.state, 'TASK_STATE_COMPLETED', JSON.stringify(concluida));
+    assert.equal(JSON.parse(concluida.artifacts[0].parts[0].text).sala, 'sala-mirante');
+
+    const chamadas = espiao.trocas().slice(antes).filter((t) => t.pedido?.method === 'tools/call');
+    const daTask = chamadas.filter((t) => t.pedido.params.arguments.responsavel === 'Marty');
+    assert.equal(daTask.length, 3, 'original, retry que repausou e retry final');
+    const [original, primeiroRetry, segundoRetry] = daTask;
+    assert.equal(primeiroRetry.pedido.params.requestState, original.resposta.result.requestState);
+    assert.equal(primeiroRetry.resposta?.result?.resultType, 'input_required');
+    assert.equal(segundoRetry.pedido.params.requestState, primeiroRetry.resposta.result.requestState);
+    assert.notEqual(segundoRetry.pedido.params.requestState, original.resposta.result.requestState);
+    assert.deepEqual(segundoRetry.pedido.params.arguments, original.pedido.params.arguments);
+    assert.equal(new Set(daTask.map((t) => t.pedido.id)).size, 3);
+  });
+
+  test('a continuacao reaproveita o trace-id da Task mesmo com outro traceparent, e o stderr do MCP mostra o par de tools/call com ids diferentes', async () => {
+    const traceDaTask = 'b1b2c3d4e5f60718293a4b5c6d7e8f91';
+    const traceDaContinuacao = 'c1b2c3d4e5f60718293a4b5c6d7e8f92';
+    await ocupar('sala-garagem', '10', '10:00', '11:00');
+    const pausada = await pausar(pedido('sala-garagem', '10', '10:00', '11:00'), { traceparent: novoTraceparent(traceDaTask) });
+
+    const r = await enviarMensagem(url, 'escolha=sala-mirante', { taskId: pausada.id, traceparent: novoTraceparent(traceDaContinuacao) });
+    assert.equal(taskDe(r)?.status?.state, 'TASK_STATE_COMPLETED', JSON.stringify(r.corpo));
+
+    const chamadas = () => srv.logs().filter((l) => l.method === 'tools/call' && traceIdDe(l.traceparent) === traceDaTask);
+    await srv.esperarLog(() => chamadas().length >= 2);
+    const linhas = srv.logs().filter((l) => traceIdDe(l.traceparent) === traceDaTask);
+    assert.deepEqual(linhas.map((l) => l.method), ['tools/list', 'resources/read', 'tools/call', 'tools/call'], 'o retry nao repete a descoberta');
+    const [original, retry] = chamadas();
+    assert.notEqual(original.id, retry.id);
+    assert.notEqual(String(original.traceparent).split('-')[2], String(retry.traceparent).split('-')[2], 'span-id novo no retry');
+    assert.deepEqual(srv.logs().filter((l) => traceIdDe(l.traceparent) === traceDaContinuacao), []);
+  });
+
+  test('o requestState nao aparece em nenhuma resposta A2A: card, SendMessage, GetTask, historico ou artifact', async () => {
+    await ocupar('sala-garagem', '11', '10:00', '11:00');
+    const antes = espiao.trocas().length;
+    const respostas = [await enviarMensagem(url, pedido('sala-garagem', '11', '10:00', '11:00'))];
+    const id = taskDe(respostas[0]).id;
+    respostas.push(await obterTask(url, id));
+    respostas.push(await enviarMensagem(url, 'escolha=sala-aquario', { taskId: id }));
+    respostas.push(await enviarMensagem(url, 'escolha=sala-fusca', { taskId: id }));
+    respostas.push(await obterTask(url, id));
+    respostas.push(await http(`${agente.url}/.well-known/agent-card.json`, { metodo: 'GET' }));
+    assert.equal(taskDe(respostas[4]).status.state, 'TASK_STATE_COMPLETED');
+
+    const [original] = espiao.trocas().slice(antes).filter((t) => t.pedido?.method === 'tools/call');
+    const requestState: string = original.resposta.result.requestState;
+    const [, payload, mac] = requestState.split('.');
+    for (const r of respostas) {
+      for (const pedaco of [requestState, payload, mac]) assert.ok(!r.bruto.includes(pedaco), `vazou em: ${r.bruto.slice(0, 200)}`);
+      assert.ok(!r.bruto.includes('requestState'));
+    }
+  });
+
+  test('duas Tasks pausadas ao mesmo tempo concluem, cada uma, com a sua propria Reserva', async () => {
+    await ocupar('sala-garagem', '12', '10:00', '11:00');
+    await ocupar('sala-garagem', '12', '14:00', '15:00');
+    const a = await pausar(pedido('sala-garagem', '12', '10:00', '11:00', 'Lorraine'));
+    const b = await pausar(pedido('sala-garagem', '12', '14:00', '15:00', 'George'));
+
+    const [ra, rb] = (await Promise.all([
+      enviarMensagem(url, 'escolha=sala-mirante', { taskId: a.id }),
+      enviarMensagem(url, 'escolha=sala-fusca', { taskId: b.id }),
+    ])).map(taskDe);
+    assert.equal(ra.status.state, 'TASK_STATE_COMPLETED', JSON.stringify(ra));
+    assert.equal(rb.status.state, 'TASK_STATE_COMPLETED', JSON.stringify(rb));
+    const reservaA = JSON.parse(ra.artifacts[0].parts[0].text);
+    const reservaB = JSON.parse(rb.artifacts[0].parts[0].text);
+    assert.notEqual(reservaA.reserva, reservaB.reserva);
+    assert.deepEqual([reservaA.sala, reservaA.inicio, reservaA.responsavel], ['sala-mirante', em('12', '10:00'), 'Lorraine']);
+    assert.deepEqual([reservaB.sala, reservaB.inicio, reservaB.responsavel], ['sala-fusca', em('12', '14:00'), 'George']);
+  });
+
+  test('duas Pausas para o mesmo Pedido produzem mensagens identicas byte a byte', async () => {
+    await ocupar('sala-porao', '13', '10:00', '11:00');
+    const texto = pedido('sala-porao', '13', '10:00', '11:00');
+    const [p1, p2] = [await pausar(texto), await pausar(texto)];
+    assert.notEqual(p1.id, p2.id);
+    assert.equal(JSON.stringify(p2.status.message.parts), JSON.stringify(p1.status.message.parts));
+    // Ordem do servidor: capacidade, depois id (fusca e garagem tem 12 lugares).
+    assert.deepEqual(p1.status.message.parts, [{ text: 'alternativas: sala-fusca, sala-garagem, sala-mirante' }]);
   });
 });

@@ -153,7 +153,11 @@ export function criarConducao(host: HostMcp): Conducao {
       const continuacao = task.continuacao;
       if (!continuacao) throw new Error(`Task ${task.id} sem continuacao MCP guardada (${task.estado})`);
       const resposta = interpretarResposta(texto, continuacao.alternativas);
-      if (!resposta) return;
+      if (!resposta) {
+        // Resposta invalida: a Pausa fica como esta, sem chamar o MCP.
+        responder(task, 'TASK_STATE_INPUT_REQUIRED', linhaDeAlternativas(continuacao.alternativas));
+        return;
+      }
       // Sai da Pausa antes do primeiro await: uma segunda continuacao da mesma
       // Task, chegando durante o retry, ja encontra WORKING.
       mover(task, 'TASK_STATE_WORKING');
