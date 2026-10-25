@@ -5,6 +5,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
 import { carregarAgenda } from './agenda.ts';
+import { registrarPolitica } from './politica.ts';
 
 const agenda = carregarAgenda();
 
@@ -85,6 +86,8 @@ export function criarServidorMcp(): McpServer {
     },
     async () => naoImplementada('reservar_sala'),
   );
+
+  registrarPolitica(servidor);
 
   return servidor;
 }
