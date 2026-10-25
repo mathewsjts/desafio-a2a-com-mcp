@@ -1,7 +1,17 @@
 import { criarServidorHttp, CAMINHO_MCP } from './entrada.ts';
-import { criarServidorMcp } from './servidor.ts';
+import { lerConfiguracaoDeEstado } from './estado.ts';
 
 const PORTA = Number(process.env.MCP_PORT ?? 7301);
+
+// Sem segredo forte nao ha requestState confiavel: recusa subir, com o motivo.
+// Checa antes de importar servidor.ts, que monta o codec no carregamento.
+try {
+  lerConfiguracaoDeEstado();
+} catch (erro) {
+  process.stderr.write(`servidor MCP nao subiu: ${(erro as Error).message}\n`);
+  process.exit(1);
+}
+const { criarServidorMcp } = await import('./servidor.ts');
 
 const http = criarServidorHttp(criarServidorMcp);
 http.listen(PORTA, '127.0.0.1', () => {
