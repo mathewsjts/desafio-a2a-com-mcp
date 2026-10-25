@@ -24,7 +24,8 @@ export type PedidoDeEscolha = Omit<Continuacao, 'argumentos'>;
 export type Desfecho =
   | { tipo: 'concluida'; reserva: ReservaFeita }
   | { tipo: 'pausa'; escolha: PedidoDeEscolha }
-  | { tipo: 'recusada' }
+  /** `reservado: false`: so vira CANCELED como resposta a uma Recusa. */
+  | { tipo: 'sem-reserva'; mensagem: string }
   | { tipo: 'falha'; mensagem: string };
 
 /** Mensagem fixa do cancelamento depois de uma Recusa. */
@@ -76,7 +77,7 @@ export function interpretarResultado(r: ResultadoTool): Desfecho {
       },
     };
   }
-  if (s.reservado === false) return { tipo: 'recusada' };
+  if (s.reservado === false) return { tipo: 'sem-reserva', mensagem: texto(r) };
   return { tipo: 'falha', mensagem: `Resultado inesperado de reservar_sala: ${texto(r)}` };
 }
 
@@ -85,9 +86,10 @@ export const linhaDeAlternativas = (alternativas: readonly string[]) => `alterna
 
 /**
  * Aplica o Desfecho a Task (que esta em WORKING). `argumentos` sao os do
- * `tools/call` original, guardados na Pausa para o retry.
+ * `tools/call` original, guardados na Pausa para o retry. `recusa` diz se esta
+ * rodada foi o retry com `decline` de uma continuacao: so ela leva a CANCELED.
  */
-function aplicar(task: Task, d: Desfecho, politica: string, argumentos: Record<string, unknown>): void {
+function aplicar(task: Task, d: Desfecho, politica: string, argumentos: Record<string, unknown>, recusa: boolean): void {
   switch (d.tipo) {
     case 'pausa':
       // A ponte: input_required -> TASK_STATE_INPUT_REQUIRED, com a continuacao MCP guardada so no store.
@@ -100,8 +102,10 @@ function aplicar(task: Task, d: Desfecho, politica: string, argumentos: Record<s
       responder(task, 'TASK_STATE_COMPLETED', `Reserva ${reserva} confirmada na ${sala}.`);
       return;
     }
-    case 'recusada':
-      responder(task, 'TASK_STATE_CANCELED', MENSAGEM_DE_RECUSA);
+    case 'sem-reserva':
+      // `reservado: false` fora do retry com decline e um resultado inesperado.
+      if (recusa) responder(task, 'TASK_STATE_CANCELED', MENSAGEM_DE_RECUSA);
+      else responder(task, 'TASK_STATE_FAILED', d.mensagem);
       return;
     case 'falha':
       responder(task, 'TASK_STATE_FAILED', d.mensagem);
@@ -129,7 +133,7 @@ export function criarConducao(host: HostMcp): Conducao {
     task.versaoDaPolitica = politica;
     const argumentos = { ...pedido };
     const resultado = await host.reservarSala(argumentos, task.traceId);
-    aplicar(task, interpretarResultado(resultado), politica, argumentos);
+    aplicar(task, interpretarResultado(resultado), politica, argumentos, false);
   }
 
   return {
@@ -165,11 +169,12 @@ export function criarConducao(host: HostMcp): Conducao {
       const { chave, requestState, argumentos } = continuacao;
       try {
         // A ponte, lado de saida: o requestState volta ao servidor como veio, com o trace-id da Task.
+        const recusa = resposta.tipo === 'recusa';
         const inputResponses = {
-          [chave]: resposta.tipo === 'recusa' ? { action: 'decline' } : { action: 'accept', content: { sala: resposta.sala } },
+          [chave]: recusa ? { action: 'decline' } : { action: 'accept', content: { sala: resposta.sala } },
         };
         const resultado = await host.reservarSala(argumentos, task.traceId, { inputResponses, requestState });
-        aplicar(task, interpretarResultado(resultado), task.versaoDaPolitica ?? '', argumentos);
+        aplicar(task, interpretarResultado(resultado), task.versaoDaPolitica ?? '', argumentos, recusa);
       } catch (e) {
         responder(task, 'TASK_STATE_FAILED', mensagemDeErro(e));
       }

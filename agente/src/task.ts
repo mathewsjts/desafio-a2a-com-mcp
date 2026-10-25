@@ -20,6 +20,9 @@ export type EstadoTask =
  * A Recusa (INPUT_REQUIRED -> CANCELED "depois do retry com decline") passa
  * por WORKING durante o retry, como a Escolha: assim a Task nunca aceita duas
  * continuacoes ao mesmo tempo, e uma falha do MCP no retry ainda vira FAILED.
+ * Por isso WORKING -> CANCELED esta na tabela, mas so o retry com decline de
+ * uma continuacao o usa: `reservado: false` em qualquer outra rodada vira
+ * FAILED (`aplicar`, em conducao.ts).
  */
 const TRANSICOES: Readonly<Record<EstadoTask, readonly EstadoTask[]>> = {
   TASK_STATE_SUBMITTED: ['TASK_STATE_WORKING'],
