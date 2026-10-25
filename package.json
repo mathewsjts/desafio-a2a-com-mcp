@@ -13,7 +13,7 @@
     "mcp": "npm run start -w servidor-mcp",
     "agente": "npm run start -w agente",
     "validar": "tsx scripts/validar.ts",
-    "test": "node --import tsx --test \"servidor-mcp/test/**/*.test.ts\" \"test/**/*.test.ts\"",
+    "test": "node --import tsx --test servidor-mcp/test/*.test.ts test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {

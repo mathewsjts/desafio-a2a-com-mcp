@@ -13,7 +13,7 @@ Dois processos Node.js (TypeScript, ESM, rodando direto com `tsx`, sem passo de 
 
 ## Como rodar
 
-Requisitos: Node.js 20.6 ou superior e npm (testado com Node 22; `npm test` usa glob no `node --test`, que pede Node 21 ou superior); Python 3.10 ou superior para o validador. Confira com `node --version` e `python3 --version`. No macOS o `/usr/bin/python3` do sistema e 3.9: nesse caso use um Python mais novo no lugar de `python3` nos comandos abaixo (por exemplo `python3.13` do Homebrew).
+Requisitos: Node.js 20.6 ou superior e npm (testado com Node 20 e 22); Python 3.10 ou superior para o validador. Confira com `node --version` e `python3 --version`. No macOS o `/usr/bin/python3` do sistema e 3.9: nesse caso use um Python mais novo no lugar de `python3` nos comandos abaixo (por exemplo `python3.13` do Homebrew).
 
 ### 1. Clonar e instalar
 
