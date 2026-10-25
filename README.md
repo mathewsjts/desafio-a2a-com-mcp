@@ -50,7 +50,7 @@ Terminal 2, agente:
 npm run agente
 ```
 
-Cada processo escreve uma linha no stderr quando esta escutando (`servidor MCP central-de-salas em http://127.0.0.1:7301/mcp` e `agente central-de-salas em http://127.0.0.1:7300/a2a ...`). Os dois escutam so em `127.0.0.1`. A ordem de subida nao importa: o agente nao fala com o servidor MCP ate a primeira Task.
+Cada processo escreve uma linha no stderr quando esta escutando (`servidor MCP central-de-salas em http://127.0.0.1:7301/mcp` e `agente central-de-salas em http://127.0.0.1:7300/a2a ...`). Os dois escutam so em `127.0.0.1`. O servidor MCP tambem imprime um aviso do SDK sobre `responseMode: 'json'` (notificacoes no meio da chamada sao descartadas); ele e esperado, este servidor nao emite notificacoes. A ordem de subida nao importa: o agente nao fala com o servidor MCP ate a primeira Task.
 
 ### 4. Rodar o validador
 
@@ -90,7 +90,7 @@ Variaveis de ambiente (todas opcionais, menos o segredo):
 
 ### Roteiro manual (opcional)
 
-Com processos recem-iniciados:
+Com processos recem-iniciados (depois do validador, reinicie os dois: ele deixa Reservas no dia 2026-11-03 e as Alternativas mudam):
 
 ```bash
 curl -s http://localhost:7300/.well-known/agent-card.json
@@ -178,8 +178,49 @@ So `@modelcontextprotocol/server` 2.4.0, `@modelcontextprotocol/client` 2.4.0, `
 
 ## Saida do validador
 
-Ultima execucao: clone limpo da branch, `npm ci`, os dois processos subidos com `npm run mcp` e `npm run agente` (portas padrao, recem-iniciados) e o comando da secao "Como rodar":
+Ultima execucao: clone limpo, `npm ci`, os dois processos recem-iniciados com `npm run mcp` e `npm run agente` nas portas padrao, e o comando da secao "Como rodar" (`python3.13 validador/validar.py --agente http://localhost:7300 --mcp http://localhost:7301`, porque o `python3` da maquina e 3.9). Codigo de saida: `0`.
 
 ```
-SAIDA_DO_VALIDADOR
+trace-id desta execucao: 84e4df360c7aec80c97598baaf455169
+procure esse valor no stderr do servidor MCP para conferir a propagacao do traceparent.
+
+PASS 01 tools/list traz as tres tools
+PASS 02 toda tool tem inputSchema de objeto
+PASS 03 listar_salas devolve structuredContent e o mesmo JSON em texto
+PASS 04 _meta sem protocolVersion devolve -32602 e HTTP 400
+PASS 05 _meta sem clientCapabilities devolve -32602 e HTTP 400
+PASS 06 tool inexistente e recusada, por -32602 ou por isError
+PASS 07 resources/read de politica://uso devolve a politica
+PASS 08 resources/read de URI inexistente devolve -32602
+PASS 09 sala inexistente devolve isError com a mensagem exata
+PASS 10 fora da janela devolve isError com a mensagem exata
+PASS 11 duracao acima de 2h devolve isError com a mensagem exata
+PASS 12 intervalo invertido devolve isError com a mensagem exata
+PASS 13 conflito devolve input_required com inputRequests e requestState
+PASS 14 a elicitation e form mode e oferece as alternativas na ordem certa
+PASS 15 conflito sem a capability elicitation devolve -32021 e HTTP 400
+PASS 16 retry com inputResponses e requestState conclui a reserva
+PASS 17 requestState adulterado e rejeitado com -32602
+PASS 18 argumentos adulterados no retry nao tomam efeito
+PASS 19 recusa conclui sem reservar e sem isError
+PASS 20 conflito sem alternativa possivel devolve isError com a mensagem exata
+
+PASS 21 agent card responde 200 no well-known com JSON
+PASS 22 o card declara a interface JSON-RPC com url e versao 1.0
+PASS 23 o card declara a skill reservar-sala
+PASS 24 SendMessage com sala livre conclui a Task
+PASS 25 o artifact chama reserva e traz a versao da politica
+PASS 26 GetTask devolve id, contextId e estado corrente
+PASS 27 SendMessage com sala ocupada pausa a Task
+PASS 28 a Task pausada lista as alternativas na ordem certa
+PASS 29 escolha fora do enum mantem a Task pausada
+PASS 30 a continuacao conclui a Task na sala escolhida
+PASS 31 SendMessage em Task terminal e recusado
+PASS 32 a recusa termina a Task em CANCELED
+PASS 33 duas Tasks pausadas ao mesmo tempo concluem cada uma com a sua reserva
+PASS 34 nenhuma resposta A2A carrega o requestState
+PASS 35 sala inexistente termina a Task em FAILED com a mensagem da tool
+PASS 36 o agente e deterministico: o mesmo pedido produz a mesma pausa
+
+resumo: 36 passaram, 0 falharam, de 36 verificacoes
 ```
