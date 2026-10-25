@@ -13,5 +13,5 @@
     "resolveJsonModule": true,
     "skipLibCheck": true
   },
-  "include": ["servidor-mcp/src", "servidor-mcp/test", "agente/src", "agente/test", "test", "scripts"]
+  "include": ["servidor-mcp/src", "servidor-mcp/test", "agente/src", "test", "scripts"]
 }
