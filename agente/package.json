@@ -1,0 +1,11 @@
+{
+  "name": "agente",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.4.0"
+  }
+}
