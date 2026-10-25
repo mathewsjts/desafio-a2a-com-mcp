@@ -280,3 +280,59 @@ export function textoDe(resultado: any): string {
 export function novoTraceparent(traceId = randomBytes(16).toString('hex')): string {
   return `00-${traceId}-${randomBytes(8).toString('hex')}-01`;
 }
+
+// ---------------------------------------------------------------- A2A
+
+let proximoIdA2a = 1;
+
+export type OpcoesA2a = {
+  /** Header `traceparent` do request A2A. */
+  traceparent?: string;
+  id?: string | number;
+  headers?: Record<string, string>;
+};
+
+/** Request JSON-RPC 2.0 cru ao endpoint A2A do agente (ex.: `${agente.url}/a2a`). */
+export function a2a(url: string, metodo: string, params: unknown, op: OpcoesA2a = {}): Promise<RespostaHttp> {
+  const headers: Record<string, string> = { ...op.headers };
+  if (op.traceparent) headers.traceparent = op.traceparent;
+  return postJson(url, { jsonrpc: '2.0', id: op.id ?? proximoIdA2a++, method: metodo, params }, headers);
+}
+
+/**
+ * `SendMessage` com uma mensagem de usuario de texto. Com `taskId`, continua
+ * essa Task; sem ele, abre uma Task nova.
+ */
+export function enviarMensagem(
+  url: string,
+  texto: string,
+  op: OpcoesA2a & { taskId?: string; messageId?: string } = {},
+): Promise<RespostaHttp> {
+  const message: Record<string, unknown> = {
+    messageId: op.messageId ?? `msg-${randomBytes(6).toString('hex')}`,
+    role: 'ROLE_USER',
+    parts: [{ text: texto }],
+  };
+  if (op.taskId) message.taskId = op.taskId;
+  return a2a(url, 'SendMessage', { message }, op);
+}
+
+/** `GetTask` por id. */
+export function obterTask(url: string, id: string, op: OpcoesA2a = {}): Promise<RespostaHttp> {
+  return a2a(url, 'GetTask', { id }, op);
+}
+
+/** A Task de uma resposta `{ result: { task } }` (undefined se nao houver). */
+export function taskDe(resposta: RespostaHttp): any {
+  return resposta.corpo?.result?.task;
+}
+
+/** Texto concatenado das parts de uma mensagem A2A. */
+export function textoDaMensagem(mensagem: any): string {
+  return ((mensagem?.parts ?? []) as any[]).map((p) => p?.text ?? '').join(' ');
+}
+
+/** trace-id (32 hex) de um traceparent W3C, ou undefined. */
+export function traceIdDe(traceparent: unknown): string | undefined {
+  return typeof traceparent === 'string' ? /^00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/.exec(traceparent)?.[1] : undefined;
+}
